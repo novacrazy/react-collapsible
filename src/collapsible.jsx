@@ -51,7 +51,6 @@ export default class Collapsible extends React.Component {
         expanded:             true,
         scrollDimension:      camelCase( 'scroll-' + this.props.dimension ),
         offsetDimension:      camelCase( 'offset-' + this.props.dimension ),
-        clientDimension:      camelCase( 'client-' + this.props.dimension ),
         capitalizedDimension: capitalize( this.props.dimension )
     };
 
@@ -124,7 +123,7 @@ export default class Collapsible extends React.Component {
         const wasTransitioning = this.cancel();
 
         const {dimension, style, measurement} = this.props;
-        const {scrollDimension, offsetDimension, clientDimension, expandedValue} = this.state;
+        const {scrollDimension, offsetDimension, expandedValue} = this.state;
 
         let element = this.refs['component'];
 

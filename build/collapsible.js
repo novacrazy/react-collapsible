@@ -82,7 +82,6 @@ var Collapsible = (function (_React$Component) {
             expanded: true,
             scrollDimension: (0, _lodash.camelCase)('scroll-' + _this.props.dimension),
             offsetDimension: (0, _lodash.camelCase)('offset-' + _this.props.dimension),
-            clientDimension: (0, _lodash.camelCase)('client-' + _this.props.dimension),
             capitalizedDimension: (0, _lodash.capitalize)(_this.props.dimension)
         }, _this.timers = [], _temp), _possibleConstructorReturn(_this, _ret);
     }
@@ -171,7 +170,6 @@ var Collapsible = (function (_React$Component) {
         var _state2 = this.state;
         var scrollDimension = _state2.scrollDimension;
         var offsetDimension = _state2.offsetDimension;
-        var clientDimension = _state2.clientDimension;
         var expandedValue = _state2.expandedValue;
 
         var element = this.refs['component'];
