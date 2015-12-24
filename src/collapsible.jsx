@@ -1,67 +1,86 @@
 /**
- * Created by Aaron on 12/21/2015.
- */
-
-/**
- * Created by novacrazy on 6/4/2015.
+ * Created by Aaron on 12/22/2015.
  */
 
 import * as React from 'react';
-import {camelCase, capitalize} from 'lodash';
+import {camelCase, capitalize, once} from 'lodash';
 import classNames from 'classnames';
 
-/*
- * This is a component that allows 'collapsing' a div either vertically or horizontally depending on
- * the dimension parameter passed to it.
- *
- * It will apply a transition if possible, but otherwise apply the style immediately if not.
- * */
+function styleHasBorder( style ) {
+    for( let key in style ) {
+        if( style.hasOwnProperty( key ) ) {
+            if( key.slice( 0, 'border'.length ) === 'border' ) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 export default class Collapsible extends React.Component {
     static displayName = 'Collapsible';
 
     static propTypes = {
-        duration:             React.PropTypes.number,
-        expanded:             React.PropTypes.bool,
-        dimension:            React.PropTypes.string,
-        component:            React.PropTypes.node,
-        className:            React.PropTypes.string,
-        disableTransitions:   React.PropTypes.bool,
-        maxDimension:         React.PropTypes.oneOfType( [
-            React.PropTypes.string,
-            React.PropTypes.number
-        ] ),
-        animatedClassName:    React.PropTypes.string,
-        collapsingClassName:  React.PropTypes.string,
-        collapsedClassName:   React.PropTypes.string,
-        collapsedInClassName: React.PropTypes.string
+        duration:            React.PropTypes.number,
+        expanded:            React.PropTypes.bool,
+        dimension:           React.PropTypes.oneOf( ['height', 'width'] ),
+        boundOtherDimension: React.PropTypes.bool,
+        component:           React.PropTypes.node,
+        className:           React.PropTypes.string,
+        disableTransitions:  React.PropTypes.bool,
+        animatedClassName:   React.PropTypes.string,
+        measurement:         React.PropTypes.oneOf( ['scroll', 'offset', 'auto'] )
     };
 
     static defaultProps = {
-        duration:             300, //0.30s
-        expanded:             true,
-        dimension:            'height',
-        component:            'div',
-        disableTransitions:   false,
-        maxDimension:         '100%',
-        animatedClassName:    'animated',
-        collapsingClassName:  'collapsing',
-        collapsedClassName:   'collapse',
-        collapsedInClassName: 'in'
+        duration:            2000, //0.30s
+        expanded:            true,
+        dimension:           'height',
+        boundOtherDimension: true,
+        component:           'div',
+        disableTransitions:  false,
+        animatedClassName:   'animated',
+        measurement:         'auto'
     };
 
     state = {
         transitioning:        false,
-        dimensionValue:       null,
+        value:                null,
+        expandedValue:        null, //when a hide is cancelled, the height/width should return to this
         expanded:             true,
         scrollDimension:      camelCase( 'scroll-' + this.props.dimension ),
         offsetDimension:      camelCase( 'offset-' + this.props.dimension ),
+        clientDimension:      camelCase( 'client-' + this.props.dimension ),
         capitalizedDimension: capitalize( this.props.dimension )
     };
 
     timers = [];
 
+    doTransition( element, setDimension, complete ) {
+        const {disableTransitions, duration} = this.props;
+
+        if( disableTransitions ) {
+            setDimension();
+            complete();
+
+        } else {
+            this.timers.push( setTimeout( complete, duration ) );
+            this.timers.push( setTimeout( setDimension, 0 ) );
+
+            function transitionEndListener( event ) {
+                complete();
+
+                element.removeEventListener( 'transitionend', transitionEndListener );
+            }
+
+            element.addEventListener( 'transitionend', transitionEndListener );
+        }
+    }
+
     cancel() {
+        const {transitioning} = this.state;
+
         this.timers.forEach( clearTimeout );
 
         this.timers = [];
@@ -69,15 +88,17 @@ export default class Collapsible extends React.Component {
         this.setState( {
             transitioning: false
         } );
+
+        return transitioning;
     }
 
     show() {
-        this.cancel();
+        const wasTransitioning = this.cancel();
 
-        const {duration, disableTransitions} = this.props;
-        const {scrollDimension} = this.state;
+        const {dimension} = this.props;
+        const {expandedValue, scrollDimension} = this.state;
 
-        let element = this.refs['collapsible'];
+        let element = this.refs['component'];
 
         this.setState( {
             transitioning: true,
@@ -86,60 +107,71 @@ export default class Collapsible extends React.Component {
 
         let setDimension = () => {
             this.setState( {
-                dimensionValue: element[scrollDimension]
+                value: expandedValue
             } );
         };
 
-        let complete = () => {
+        let complete = once( () => {
             this.setState( {
                 transitioning: false
             } );
-        };
+        } );
 
-        if( !disableTransitions ) {
-            this.timers.push( setTimeout( complete, duration ) );
-            this.timers.push( setTimeout( setDimension, 0 ) );
-
-        } else {
-            setDimension();
-            complete();
-        }
+        this.doTransition( element, setDimension, complete );
     }
 
     hide() {
-        this.cancel();
+        const wasTransitioning = this.cancel();
 
-        const {duration, disableTransitions} = this.props;
-        const {offsetDimension} = this.state;
+        const {dimension, style, measurement} = this.props;
+        const {scrollDimension, offsetDimension, clientDimension, expandedValue} = this.state;
 
-        let element = this.refs['collapsible'];
+        let element = this.refs['component'];
+
+        let offsetValue;
+
+        if( measurement === 'auto' ) {
+            if( styleHasBorder( style ) ) {
+                offsetValue = element[scrollDimension];
+
+            } else {
+                offsetValue = element[offsetDimension];
+            }
+
+        } else if( measurement === 'scroll' ) {
+            offsetValue = element[scrollDimension];
+
+        } else {
+            offsetValue = element[offsetDimension]
+        }
 
         this.setState( {
-            transitioning:  true,
-            expanded:       false,
-            dimensionValue: element[offsetDimension]
+            transitioning: true,
+            expanded:      false,
+            value:         offsetValue,
+            height:        element.offsetHeight,
+            width:         element.offsetWidth
         } );
+
+        if( !wasTransitioning ) {
+            this.setState( {
+                expandedValue: offsetValue
+            } );
+        }
 
         let setDimension = () => {
             this.setState( {
-                dimensionValue: 0
+                value: 0
             } );
         };
 
-        let complete = () => {
+        let complete = once( () => {
             this.setState( {
                 transitioning: false
             } );
-        };
+        } );
 
-        if( !disableTransitions ) {
-            this.timers.push( setTimeout( complete, duration ) );
-            this.timers.push( setTimeout( setDimension, 0 ) );
-
-        } else {
-            setDimension();
-            complete();
-        }
+        this.doTransition( element, setDimension, complete );
     }
 
     toggle() {
@@ -162,40 +194,57 @@ export default class Collapsible extends React.Component {
     }
 
     render() {
-        const {dimension, children, className, component, style, maxDimension, animatedClassName, collapsingClassName, collapsedClassName, collapsedInClassName} = this.props;
+        const {dimension, boundOtherDimension, children, className, style, component, animatedClassName} = this.props;
 
-        const {dimensionValue, transitioning, expanded, capitalizedDimension} = this.state;
+        const {value, transitioning, expanded, capitalizedDimension, height, width} = this.state;
 
-        const Component = component;
+        let newClassName = classNames( className, animatedClassName );
 
-        let classNameArgs = [className, animatedClassName], newStyle = {...style};
+        let newStyle = {
+            ...style,
+            position: 'relative',
+            overflow: 'hidden'
+        };
 
         if( transitioning ) {
-            newStyle[dimension] = maxDimension;
-
-            newStyle['max' + capitalizedDimension] = dimensionValue;
+            newStyle['max' + capitalizedDimension] = value;
 
             if( expanded ) {
-                newStyle['min' + capitalizedDimension] = dimensionValue;
+                newStyle['min' + capitalizedDimension] = value;
             }
 
-            classNameArgs.push( collapsingClassName );
+            if( boundOtherDimension ) {
+                if( dimension === 'height' ) {
+                    newStyle['width'] = width;
+
+                } else {
+                    newStyle['height'] = height;
+                }
+            }
 
         } else {
-            classNameArgs.push( collapsedClassName );
-
             if( expanded ) {
-                classNameArgs.push( collapsedInClassName );
+                if( component === 'tr' ) {
+                    newStyle['display'] = 'table-row';
+
+                } else if( component === 'tbody' ) {
+                    newStyle['display'] = 'table-row-group';
+
+                } else {
+                    newStyle['display'] = 'block';
+                }
 
             } else {
+                newStyle['display'] = 'none';
+
                 newStyle['max' + capitalizedDimension] = 0;
             }
         }
 
         return React.createElement( component, {
             ...this.props,
-            className:       classNames( classNameArgs ),
-            ref:             'collapsible',
+            className:       newClassName,
+            ref:             'component',
             style:           newStyle,
             'aria-expanded': expanded
         }, children );
